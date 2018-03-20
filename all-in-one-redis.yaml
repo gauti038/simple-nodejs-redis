@@ -1,0 +1,134 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+data:
+  init.sh: |
+    #!/bin/bash
+    if [[ ${HOSTNAME} == 'redis-0' ]]; then
+      redis-server /redis-config/master.conf
+    else
+      redis-server /redis-config/slave.conf
+    fi
+  master.conf: |
+    pidfile "redis.pid"
+    logfile "redis.log"
+    dbfilename "dump.rdb"
+    port 6379
+    dir /redis-data
+    maxmemory 10gb
+    bind 0.0.0.0
+    timeout 0
+    tcp-keepalive 0
+    loglevel debug
+    databases 16
+    stop-writes-on-bgsave-error yes
+    rdbcompression yes
+    rdbchecksum yes
+    appendonly yes
+    appendfilename "appendonly.aof"
+    appendfsync everysec
+    lua-time-limit 5000
+    repl-timeout 100
+    save 900 1
+    save 300 10
+  sentinel.conf: |
+    bind 0.0.0.0
+    port 26379
+    sentinel monitor redis redis-0.redis 6379 2
+    sentinel parallel-syncs redis 1
+    sentinel down-after-milliseconds redis 10000
+    sentinel failover-timeout redis 20000
+  sentinel.sh: |
+    #!/bin/bash
+    while ! ping -c 1 redis-0.redis; do
+      echo 'Waiting for server'
+      sleep 2
+    done
+    redis-sentinel /redis-config/sentinel.conf
+  slave.conf: |
+    pidfile "redis.pid"
+    logfile "redis.log"
+    dbfilename "dump.rdb"
+    port 6379
+    dir .
+    maxmemory 10gb
+    slaveof redis-0.redis 6379
+    bind 0.0.0.0
+    timeout 0
+    tcp-keepalive 0
+    loglevel debug
+    databases 16
+    stop-writes-on-bgsave-error yes
+    rdbcompression yes
+    rdbchecksum yes
+    appendonly yes
+    appendfilename "appendonly.aof"
+    appendfsync everysec
+    lua-time-limit 5000
+    repl-timeout 100
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+spec:
+  ports:
+  - port: 6379
+    name: peer
+  clusterIP: None
+  selector:
+    app: redis
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-sentinel
+spec:
+  ports:
+  - port: 26379
+    name: peer
+  clusterIP: None
+  selector:
+    app: redis
+---
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: redis
+spec:
+  replicas: 3
+  serviceName: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - command: [sh, -c, source /redis-config/init.sh ]
+        image: containers.cisco.com/gka/redis-alpine:3.2.7-alpine
+        name: redis
+        ports:
+        - containerPort: 6379
+          name: redis
+        volumeMounts:
+        - mountPath: /redis-config
+          name: config
+        - mountPath: /redis-data
+          name: data
+      - command: [sh, -c, source /redis-config/sentinel.sh]
+        image: containers.cisco.com/gka/redis-alpine:3.2.7-alpine
+        name: sentinel
+        volumeMounts:
+        - mountPath: /redis-config
+          name: config
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: redis-config
+        name: config
+      - emptyDir:
+        name: data
+      securityContext:
+        runAsUser: 0
+---

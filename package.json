@@ -1,0 +1,22 @@
+{
+  "name": "map-dependencies",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dependency components for MAP services - proxy, MAP, PUB/SUB",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "body-parser": "^1.14.1",
+    "cron": "^1.3.0",
+    "express": "^4.13.3",
+    "hashmap": "^2.3.0",
+    "pool-redis": "^0.1.2",
+    "properties-reader": "~0.0.15",
+    "redis": "^2.4.2",
+    "redis-scripto": "^0.1.3",
+    "redis-sentinel": "^0.3.3",
+    "request": "~2.69.0",
+    "simple-sentinel": "^0.2.0"
+  }
+}
